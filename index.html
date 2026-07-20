@@ -1,0 +1,371 @@
+<!DOCTYPE html><html lang="zh-TW"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>運動打卡</title>
+
+  <!-- 第三方 CDN 請鎖定版本，不要使用 @latest -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@0.542.0"></script>
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='8' fill='%23e53935'/%3E%3C/svg%3E">
+  <meta name="theme-color" content="#e53935">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <style>
+    ::-webkit-scrollbar { width: 0; background: transparent; }
+    body { 
+      -webkit-tap-highlight-color: transparent; 
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    /* 史努比美式手繪粗線條風格 */
+    .snoopy-border {
+      border: 3px solid #2c2c2c;
+    }
+    .snoopy-border-b {
+      border-bottom: 3px solid #2c2c2c;
+    }
+  </style></head>
+  
+  <!-- Snoopy 經典復古米白紙張底色 [#fbf9f5]、深碳灰文字 [#2c2c2c] -->
+  <body class="bg-[#fbf9f5] text-[#2c2c2c] min-h-screen flex flex-col select-none">
+
+  <script>
+    /*
+      自動註冊規則（保留原有機制）
+      - 每個工具放在根目錄下單一資料夾，例如 /snoopy-workout/
+    */
+    (function autoRegister() {
+      let appPath = window.location.pathname;
+      if (appPath.endsWith('index.html')) appPath = appPath.replace('index.html', '');
+      if (!appPath.endsWith('/')) appPath += '/';
+      if (appPath === '/') return;
+
+      try {
+        localStorage.setItem('myAppLauncherLastPath', appPath);
+        localStorage.setItem('myAppLauncherLastSeenAt', String(Date.now()));
+      } catch {}
+
+      const launcherPath = appPath.replace(/[^/]+\/$/, '');
+      const normalizedLauncherPath = launcherPath || '/';
+
+      function configureHomeLinkAndProbe() {
+        const homeLinks = Array.from(document.querySelectorAll('[data-home-link]'));
+        const homeHref = normalizedLauncherPath.includes('?')
+          ? `${normalizedLauncherPath}&home=1`
+          : `${normalizedLauncherPath}?home=1`;
+
+        homeLinks.forEach(el => el.setAttribute('href', homeHref));
+        if (window.location.protocol === 'file:') return;
+
+        const probeUrl = normalizedLauncherPath.endsWith('/')
+          ? `${normalizedLauncherPath}index.html`
+          : `${normalizedLauncherPath}/index.html`;
+
+        const revealHome = () => {
+          homeLinks.forEach(el => el.classList.remove('invisible', 'pointer-events-none'));
+        };
+
+        fetch(probeUrl, { method: 'HEAD' })
+          .then(res => {
+            if (res.ok) { revealHome(); return; }
+            if (res.status === 405) {
+              return fetch(probeUrl, { method: 'GET' }).then(r => { if (r.ok) revealHome(); });
+            }
+          })
+          .catch(() => {});
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', configureHomeLinkAndProbe, { once: true });
+      } else {
+        configureHomeLinkAndProbe();
+      }
+
+      const appMeta = {
+        id: 'snoopy-workout-tracker',
+        name: 'Snoopy 運動打卡',
+        nameZh: 'Snoopy 運動打卡',
+        nameEn: 'Snoopy Workout',
+        path: appPath,
+        icon: 'check-circle',
+        color: 'rose' 
+      };
+
+      const storageKey = 'myAppLauncherStorage';
+      const launcherData = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      const existingIndex = launcherData.findIndex(app => app.path === appMeta.path);
+      if (existingIndex === -1) launcherData.push(appMeta);
+      else launcherData[existingIndex] = { ...launcherData[existingIndex], ...appMeta };
+      localStorage.setItem(storageKey, JSON.stringify(launcherData));
+    })();
+  </script>
+
+  <!-- 導覽列：史努比經典狗屋紅 [#e53935] -->
+  <header class="bg-[#e53935] text-white p-4 shadow-sm sticky top-0 z-20 snoopy-border-b">
+    <div class="max-w-md mx-auto flex items-center justify-between">
+      <a href="/" data-home-link class="p-2 -ml-2 hover:bg-red-700 rounded-full transition-colors invisible pointer-events-none" aria-label="返回目錄">
+        <i data-lucide="home" class="w-5 h-5"></i>
+      </a>
+      <div class="flex items-center gap-2">
+        <span class="text-xl">🐶</span>
+        <h1 class="text-lg font-black tracking-wider">Snoopy 運動打卡</h1>
+      </div>
+      <div class="w-9 flex justify-end">
+        <span class="text-xl">🐾</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-grow w-full max-w-md mx-auto p-4 flex flex-col gap-4">
+    
+    <!-- 頂部對話泡泡與統計看板 -->
+    <section class="bg-white rounded-2xl p-4 snoopy-border shadow-[4px_4px_0px_0px_#2c2c2c] flex items-center justify-between bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px]">
+      <div class="flex flex-col gap-1 flex-grow pr-2">
+        <div id="snoopy-bubble" class="bg-[#fffde7] px-3 py-2 rounded-xl text-xs font-bold border-2 border-[#2c2c2c] relative after:content-[''] after:absolute after:top-full after:left-4 after:border-8 after:border-transparent after:border-t-[#fffde7] before:content-[''] before:absolute before:top-full before:left-[14px] before:border-[9px] before:border-transparent before:border-t-[#2c2c2c] before:-z-10 mb-2">
+          今天也是充滿活力的一天！🐶
+        </div>
+        <div class="text-[11px] text-slate-500 font-bold tracking-wide pl-1" id="today-date-str">2026年7月18日</div>
+      </div>
+      
+      <!-- 累計打卡章小看板 -->
+      <div class="bg-red-50 p-3 rounded-xl border-2 border-[#2c2c2c] text-center min-w-[95px] flex-shrink-0">
+        <div class="text-[10px] font-black text-[#e53935] tracking-wider">本月已動</div>
+        <div class="text-2xl font-black mt-0.5" id="month-count">0 <span class="text-xs font-normal text-slate-500">次</span></div>
+      </div>
+    </section>
+
+    <!-- 主打卡大按鈕區 -->
+    <section class="flex flex-col items-center justify-center py-4">
+      <button id="btn-stamp" class="w-44 h-44 rounded-full snoopy-border bg-[#fbc02d] shadow-[0px_8px_0px_0px_#2c2c2c] active:translate-y-1 active:shadow-[0px_4px_0px_0px_#2c2c2c] transition-all flex flex-col items-center justify-center p-4 text-center group">
+        <div id="stamp-icon" class="text-5xl mb-2 group-active:scale-90 transition-transform">🐾</div>
+        <div id="stamp-text" class="font-black text-sm tracking-wide text-[#2c2c2c]">今天運動了！<br><span class="text-xs text-amber-900 font-bold">(點我蓋章)</span></div>
+      </button>
+    </section>
+
+    <!-- 當月打卡牆日曆區 -->
+    <section class="bg-white rounded-2xl p-4 snoopy-border shadow-[4px_4px_0px_0px_#2c2c2c]">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-black text-slate-700 flex items-center gap-1.5">
+          <span>📅</span> 運動集印卡
+        </h2>
+        <!-- 月份切換 -->
+        <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5 border border-slate-300">
+          <button id="btn-prev-month" class="p-1 hover:bg-white rounded transition-colors text-slate-600" aria-label="上個月">
+            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+          </button>
+          <span id="calendar-title" class="text-xs font-black px-2 min-w-[80px] text-center">2026年 07月</span>
+          <button id="btn-next-month" class="p-1 hover:bg-white rounded transition-colors text-slate-600" aria-label="下個月">
+            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- 星期欄位 -->
+      <div class="grid grid-cols-7 gap-1 text-center text-[11px] font-black text-slate-400 tracking-wider mb-2">
+        <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+      </div>
+
+      <!-- 日曆網格 -->
+      <div id="calendar-grid" class="grid grid-cols-7 gap-1.5"></div>
+      
+      <div class="mt-4 text-[11px] text-slate-400 font-medium text-center bg-slate-50 py-1.5 rounded-lg">
+        💡 提示：點擊過去的日期也可以進行補打卡喔！
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="text-center py-4 text-xs text-slate-400 font-medium">
+    🐾 小工具製造師 • 美式復古手繪風
+  </footer>
+
+  <script>
+    lucide.createIcons();
+
+    // 核心資料狀態儲存 YYYY-MM-DD
+    let workoutRecords = {};
+    
+    const today = new Date();
+    let currentYear = today.getFullYear();
+    let currentMonth = today.getMonth(); 
+
+    // 史努比主題驚喜語錄
+    const snoopyQuotes = [
+      "今天也是充滿活力的一天！🐶",
+      "動一動，等一下可以多吃一塊餅乾！🍪",
+      "做得好！胡士托在為你歡呼呢！🐤",
+      "像躺在狗屋上一樣輕鬆舒展身體吧！☁️",
+      "太棒了！今天也是一隻健康快樂的小狗！🐾",
+      "持續累積，你就像在存健康金幣一樣呢！💰"
+    ];
+
+    const btnStamp = document.getElementById('btn-stamp');
+    const stampIcon = document.getElementById('stamp-icon');
+    const stampText = document.getElementById('stamp-text');
+    const monthCountEl = document.getElementById('month-count');
+    const calendarTitle = document.getElementById('calendar-title');
+    const calendarGrid = document.getElementById('calendar-grid');
+    const snoopyBubble = document.getElementById('snoopy-bubble');
+    const todayDateStr = document.getElementById('today-date-str');
+    
+    const btnPrevMonth = document.getElementById('btn-prev-month');
+    const btnNextMonth = document.getElementById('btn-next-month');
+
+    function formatDateString(year, month, day) {
+      const mm = String(month + 1).padStart(2, '0');
+      const dd = String(day).padStart(2, '0');
+      return `${year}-${mm}-${dd}`;
+    }
+
+    function loadRecords() {
+      try {
+        const data = localStorage.getItem('snoopy_workout_records');
+        if (data) workoutRecords = JSON.parse(data);
+      } catch (e) {
+        workoutRecords = {};
+      }
+    }
+
+    function saveRecords() {
+      try {
+        localStorage.setItem('snoopy_workout_records', JSON.stringify(workoutRecords));
+      } catch (e) {}
+    }
+
+    function updateMainUI() {
+      const todayStr = formatDateString(today.getFullYear(), today.getMonth(), today.getDate());
+      const hasWorkedOutToday = !!workoutRecords[todayStr];
+
+      if (hasWorkedOutToday) {
+        btnStamp.classList.remove('bg-[#fbc02d]');
+        btnStamp.classList.add('bg-[#e53935]', 'text-white');
+        stampIcon.textContent = '❤️';
+        stampText.innerHTML = `<span class="font-black text-base">打卡完成！</span><br><span class="text-xs text-red-100 font-bold">今天超棒的</span>`;
+      } else {
+        btnStamp.classList.remove('bg-[#e53935]', 'text-white');
+        btnStamp.classList.add('bg-[#fbc02d]', 'text-[#2c2c2c]');
+        stampIcon.textContent = '🐾';
+        stampText.innerHTML = `今天運動了！<br><span class="text-xs text-amber-950 font-bold">(點我蓋章)</span>`;
+      }
+
+      let count = 0;
+      const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+      Object.keys(workoutRecords).forEach(dateKey => {
+        if (dateKey.startsWith(monthPrefix) && workoutRecords[dateKey]) {
+          count++;
+        }
+      });
+      monthCountEl.innerHTML = `${count} <span class="text-xs font-bold text-slate-500">次</span>`;
+    }
+
+    function renderCalendar() {
+      calendarGrid.innerHTML = '';
+      calendarTitle.textContent = `${currentYear}年 ${String(currentMonth + 1).padStart(2, '0')}月`;
+
+      const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
+      const totalDays = new Date(currentYear, currentMonth + 1, 0).getDate();
+      const todayStr = formatDateString(today.getFullYear(), today.getMonth(), today.getDate());
+
+      for (let i = 0; i < firstDayIndex; i++) {
+        const emptyDiv = document.createElement('div');
+        emptyDiv.className = 'aspect-square';
+        calendarGrid.appendChild(emptyDiv);
+      }
+
+      for (let day = 1; day <= totalDays; day++) {
+        const dateStr = formatDateString(currentYear, currentMonth, day);
+        const isMarked = !!workoutRecords[dateStr];
+        const isToday = (dateStr === todayStr);
+
+        const dayBtn = document.createElement('button');
+        dayBtn.className = `aspect-square rounded-xl border-2 flex flex-col items-center justify-between p-1 relative transition-all active:scale-95 `;
+        
+        if (isMarked) {
+          dayBtn.classList.add('bg-red-50', 'border-[#2c2c2c]', 'text-[#2c2c2c]');
+        } else {
+          dayBtn.classList.add('bg-slate-50/40', 'border-slate-200', 'text-slate-700');
+        }
+
+        if (isToday) {
+          dayBtn.classList.remove('border-slate-200');
+          dayBtn.classList.add('border-[#fbc02d]', 'ring-2', 'ring-[#fbc02d]', 'ring-offset-1');
+        }
+
+        const dayNumSpan = document.createElement('span');
+        dayNumSpan.className = 'text-xs font-black self-start pl-0.5';
+        dayNumSpan.textContent = day;
+        dayBtn.appendChild(dayNumSpan);
+
+        const stampMark = document.createElement('span');
+        if (isMarked) {
+          stampMark.className = 'text-base leading-none mb-1';
+          stampMark.textContent = '🔴'; 
+        } else {
+          stampMark.className = 'text-[10px] text-slate-300 mb-1 font-bold';
+          stampMark.textContent = '○';
+        }
+        dayBtn.appendChild(stampMark);
+
+        dayBtn.addEventListener('click', () => {
+          workoutRecords[dateStr] = !workoutRecords[dateStr];
+          if (!workoutRecords[dateStr]) {
+            delete workoutRecords[dateStr];
+          }
+          saveRecords();
+          updateMainUI();
+          renderCalendar();
+          snoopyBubble.textContent = snoopyQuotes[Math.floor(Math.random() * snoopyQuotes.length)];
+        });
+
+        calendarGrid.appendChild(dayBtn);
+      }
+    }
+
+    btnStamp.addEventListener('click', () => {
+      const todayStr = formatDateString(today.getFullYear(), today.getMonth(), today.getDate());
+      
+      if (workoutRecords[todayStr]) {
+        delete workoutRecords[todayStr];
+        snoopyBubble.textContent = "取消了呀？沒關係，明天再蓋章！🐶";
+      } else {
+        workoutRecords[todayStr] = true;
+        snoopyBubble.textContent = snoopyQuotes[Math.floor(Math.random() * snoopyQuotes.length)];
+      }
+      
+      saveRecords();
+      updateMainUI();
+      renderCalendar();
+    });
+
+    btnPrevMonth.addEventListener('click', () => {
+      currentMonth--;
+      if (currentMonth < 0) {
+        currentMonth = 11;
+        currentYear--;
+      }
+      renderCalendar();
+      updateMainUI();
+    });
+
+    btnNextMonth.addEventListener('click', () => {
+      currentMonth++;
+      if (currentMonth > 11) {
+        currentMonth = 0;
+        currentYear++;
+      }
+      renderCalendar();
+      updateMainUI();
+    });
+
+    function init() {
+      const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+      todayDateStr.textContent = today.toLocaleDateString('zh-TW', options);
+      loadRecords();
+      updateMainUI();
+      renderCalendar();
+    }
+
+    init();
+  </script>
+</body></html>
